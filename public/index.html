@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ADC Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .step { display: none; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        .active { display: block; }
+        .controls { margin-top: 20px; }
+        canvas { max-width: 100%; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        /* Added a scroll box so a long table doesn't ruin your page layout */
+        .table-wrapper { max-height: 500px; overflow-y: auto; border: 1px solid #ccc; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>ADC Sampling & Quantization Simulator</h1>
+
+    <div id="step1" class="step active">
+        <h2>Step 1: Welcome</h2>
+        <p>This tool simulates how an Analog-to-Digital Converter (ADC) works.</p>
+        <p><strong>Sampling</strong> captures the signal at specific intervals, while <strong>Quantization</strong> maps those values to discrete binary levels.</p>
+        <button onclick="nextStep(2)">Start Simulator</button>
+    </div>
+
+    <div id="step2" class="step">
+        <h2>Step 2: Specifications</h2>
+        <label>Waveform: 
+            <select id="type">
+                <option value="sine">Sine</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Sawtooth</option>
+            </select>
+        </label><br><br>
+        <label>Frequency (Hz): <input type="number" id="freq" value="1"></label><br><br>
+        <label>Peak Voltage (V): <input type="number" id="amp" value="5"></label><br><br>
+        <label>Sampling Freq (Hz): <input type="number" id="fs" value="20"></label><br><br>
+        <label>Resolution: 
+            <select id="bits">
+                <option value="2">2-bit</option>
+                <option value="4">4-bit</option>
+                <option value="8" selected>8-bit</option>
+                <option value="16">16-bit</option>
+            </select>
+        </label><br><br>
+        <button onclick="calculate()">Generate Result</button>
+    </div>
+
+    <div id="step3" class="step">
+        <h2>Step 3: Output</h2>
+        <h3 id="snrDisplay">SNR: -- dB</h3>
+        <canvas id="adcChart"></canvas>
+        <h4>Full Quantized Data Table:</h4>
+        <div class="table-wrapper">
+            <table id="binaryTable">
+                <tr><th>Time (s)</th><th>Analog (V)</th><th>Quantized (V)</th><th>Binary Code</th></tr>
+            </table>
+        </div>
+        <br>
+        <button onclick="nextStep(2)">Back to Settings</button>
+    </div>
+
+    <script>
+        let chart;
+
+        function nextStep(s) {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            document.getElementById('step' + s).classList.add('active');
+        }
+
+        async function calculate() {
+            const params = new URLSearchParams({
+                type: document.getElementById('type').value,
+                freq: document.getElementById('freq').value,
+                amp: document.getElementById('amp').value,
+                fs: document.getElementById('fs').value,
+                bits: document.getElementById('bits').value
+            });
+
+            const response = await fetch('/calculate?' + params);
+            const data = await response.json();
+
+            document.getElementById('snrDisplay').innerText = "Theoretical SNR: " + data.snr.toFixed(2) + " dB";
+            renderChart(data.samples);
+            renderTable(data.samples);
+            nextStep(3);
+        }
+
+        function renderChart(samples) {
+            const ctx = document.getElementById('adcChart').getContext('2d');
+            if(chart) chart.destroy();
+            
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: samples.map(s => s.t.toFixed(3)),
+                    datasets: [{
+                        label: 'Original Analog Signal',
+                        data: samples.map(s => s.orig),
+                        borderColor: 'blue',
+                        stepped: false
+                    }, {
+                        label: 'Quantized Digital Signal',
+                        data: samples.map(s => s.quant),
+                        borderColor: 'red',
+                        stepped: true
+                    }]
+                }
+            });
+        }
+
+        // FIXED FUNCTION: Removed .slice(0, 10) to show all samples
+        function renderTable(samples) {
+            const table = document.getElementById('binaryTable');
+            table.innerHTML = `<tr><th>Time (s)</th><th>Analog (V)</th><th>Quantized (V)</th><th>Binary Code</th></tr>`;
+            
+            samples.forEach(s => {
+                let row = table.insertRow();
+                row.innerHTML = `<td>${s.t.toFixed(3)}</td><td>${s.orig.toFixed(2)}</td><td>${s.quant.toFixed(2)}</td><td><code>${s.bin}</code></td>`;
+            });
+        }
+    </script>
+</body>
+</html>
